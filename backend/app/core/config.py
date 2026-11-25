@@ -37,6 +37,26 @@ class Settings(BaseSettings):
     DEMO_VIEWER_EMAIL: Optional[str] = None
     DEMO_VIEWER_PASSWORD: Optional[str] = None
 
+    # LLM Gateway. "offline" is the default so the product runs deterministically
+    # without any paid provider. A real provider is only used when explicitly
+    # configured together with an API key.
+    LLM_PROVIDER: str = "offline"  # offline | mock | openai | gemini
+    LLM_MODEL: str = "gemini-2.5-flash"
+    LLM_API_KEY: Optional[str] = None
+    LLM_BASE_URL: Optional[str] = None
+    LLM_TIMEOUT_SECONDS: int = 10
+    LLM_MAX_RETRIES: int = 1
+    LLM_DEMO_MODE: bool = True
+
+    # Bounded workflow / recommendation policy
+    WORKFLOW_MAX_NODE_EXECUTIONS: int = 40
+    WORKFLOW_LLM_BUDGET: int = 6
+    WORKFLOW_MAX_COMPUTE_SECONDS: int = 900
+    TOP_N_RECOMMENDATIONS: int = 5
+
+    # Development convenience: run demo data seeding during application startup.
+    SEED_DEMO_DATA_ON_STARTUP: bool = False
+
     # CORS origins
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",

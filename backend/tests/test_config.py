@@ -86,6 +86,18 @@ def test_alembic_ini_contains_no_connection_url():
         assert line.split("=", 1)[1].strip() == ""
 
 
+def test_llm_defaults_are_offline_and_secret_free():
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL="postgresql://app_user:app_pass@db:5432/app_db",
+    )
+
+    assert settings.LLM_PROVIDER == "offline"
+    assert settings.LLM_DEMO_MODE is True
+    assert settings.LLM_API_KEY is None
+    assert settings.TOP_N_RECOMMENDATIONS == 5
+
+
 def test_docker_compose_requires_database_credentials():
     text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
