@@ -381,6 +381,13 @@ All errors return `application/problem+json`:
   }
   ```
 
+**Lifecycle and nullability (D-024, D-033 Option A):**
+- `status` may be `ready`, `no_eligible_carriers`, or `no_rankable_candidates` for completed generation. `ready` requires at least one ranked candidate.
+- `candidates` contains every eligible candidate. Ranked candidates carry non-null `rank` and `composite_score`. Eligible-unrankable candidates remain in `candidates` with `rank = null`, `composite_score = null`, `lane_rate_used = null`, and `component_scores.rate_competitiveness = null`; they are excluded from ranked top-N views and are never placed in `ineligible_candidates`.
+- `ineligible_candidates` contains only `ineligible` and `insufficient_data` evaluations.
+- `component_scores.lane_familiarity` and `component_scores.reliability` are explicit nulls (deferred). They must not carry numeric values in the MVP.
+- A `no_rankable_candidates` response has an empty ranked list and preserves every eligible-unrankable candidate. It is not a processing failure.
+
 ---
 
 ### 5.6 Approvals

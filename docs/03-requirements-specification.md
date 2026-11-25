@@ -241,7 +241,7 @@ Conventions:
 | FR-124 | The system shall transition Recommendation status through canonical values. | MVP | PH-4 | Recommendation Engine | Canonical transitions enforced. |
 | FR-125 | The system shall generate an Explanation citing deterministic facts with optional LLM narration. | MVP | PH-4 | LLM Gateway | Template fallback used when narration disabled/fails. |
 | FR-126 | The system shall ensure explanations cite only recorded facts and introduce no new claims. | Post-MVP | Post-MVP | LLM Gateway | Deferred to Post-MVP in Phase 1.7.4 scope challenge: Redundant ground-truth rule: ensure explanations cite only recorded facts; already guaranteed by FR-125 deterministic template fallback. |
-| FR-127 | The system shall return `no_eligible_carriers` when filtering yields zero candidates. | MVP | PH-4 | Recommendation Engine | Status and reason returned without approval interrupt. |
+| FR-127 | The system shall return `no_eligible_carriers` when filtering yields zero eligible candidates. | MVP | PH-4 | Recommendation Engine | Status and reason returned without approval interrupt. Eligible-but-zero-rankable outcomes use `no_rankable_candidates` (D-033) and are never reported as `no_eligible_carriers`. |
 | FR-128 | The system shall degrade gracefully when carrier data is incomplete (`insufficient_data`). | Post-MVP | Post-MVP | Recommendation Engine | Deferred to Post-MVP in Phase 1.7.4 scope challenge: Nonessential scoring nuance: incomplete data ranking penalty; incomplete carriers are already safely flagged insufficient_data by FR-099. |
 | FR-129 | The system shall store the Scoring Configuration version used. | Post-MVP | Post-MVP | Recommendation Engine | Deferred to Post-MVP in Phase 1.7.4 scope challenge: Nonessential configuration tracking: dynamic config version linkage on recommendations; MVP uses single active seed configuration. |
 | FR-130 | The system shall supersede prior active Recommendations when Shipment changes. | Post-MVP | Post-MVP | Recommendation Engine | Prior recommendation superseding handled in Post-MVP. |
@@ -404,7 +404,7 @@ Total Functional Requirements             156      100.0%
 - **Actor:** `broker` (trigger); `system` (execution).
 - **Preconditions:** Shipment is `validated`.
 - **Main flow:** The operator requests recommendations. The workflow starts, loads shipment, normalizes requirements, resolves carrier candidates, filters hard eligibility, scores candidates with active config and lane rates, renders explanation (with template fallback), and persists a `ready` Recommendation.
-- **Alternate:** No eligible carriers → status `no_eligible_carriers` with reasons.
+- **Alternate:** No eligible carriers → status `no_eligible_carriers` with reasons. Eligible carriers but none rankable → status `no_rankable_candidates` with explicit null scores/ranks (D-033).
 
 ### UC-06 — Review a recommendation
 - **Actor:** `broker`.
@@ -468,7 +468,7 @@ All values are lowercase `snake_case`.
 - **Shipment status:** `draft`, `intake_received`, `validation_failed`, `validated`, `sourcing`, `recommendation_ready`, `pending_approval`, `approved`, `booking_proposed`, `booked`, `cancelled`, `closed`.
 - **Validation severity:** `info`, `warning`, `error`, `critical`.
 - **Validation result status:** `passed`, `passed_with_warnings`, `failed`.
-- **Recommendation status:** `pending`, `computing`, `ready`, `no_eligible_carriers`, `failed`, `superseded`.
+- **Recommendation status:** `pending`, `computing`, `ready`, `no_eligible_carriers`, `no_rankable_candidates`, `failed`, `superseded`.
 - **Candidate eligibility:** `eligible`, `ineligible`, `insufficient_data`.
 - **Approval status:** `pending`, `approved`, `rejected`, `changes_requested`, `cancelled`.
 - **Workflow execution status:** `queued`, `running`, `waiting_for_human`, `resumption_pending`, `completed`, `failed`, `cancelled`, `timed_out`.

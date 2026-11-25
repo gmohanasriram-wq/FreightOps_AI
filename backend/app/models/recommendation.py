@@ -25,7 +25,8 @@ class Recommendation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "recommendations"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'computing', 'ready', 'no_eligible_carriers', 'failed', 'superseded')",
+            "status IN ('pending', 'computing', 'ready', 'no_eligible_carriers', "
+            "'no_rankable_candidates', 'failed', 'superseded')",
             name="chk_recommendations_status",
         ),
     )

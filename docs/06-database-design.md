@@ -322,7 +322,7 @@ Canonical tokens: All table names from Appendix A §A.3, all enum values from §
 | `id` | uuid | PK |
 | `shipment_id` | uuid | FK → `shipments.id`, not null |
 | `workflow_execution_id` | uuid | FK → `workflow_executions.id`, null, unique (1:1 correlation per Decision D1) |
-| `status` | text | not null, CHECK in `pending`, `computing`, `ready`, `no_eligible_carriers`, `failed`, `superseded` |
+| `status` | text | not null, CHECK in `pending`, `computing`, `ready`, `no_eligible_carriers`, `no_rankable_candidates`, `failed`, `superseded` |
 | `scoring_config_id` | uuid | FK → `scoring_configs.id`, not null |
 | `config_version` | integer | not null |
 | `explanation_template` | text | not null |
@@ -333,6 +333,8 @@ Canonical tokens: All table names from Appendix A §A.3, all enum values from §
 | `created_at`, `updated_at` | timestamptz | not null default now() |
 
 **Indexes:** `shipment_id`, `status`.
+
+**Lifecycle note (D-033 Option A):** `ready` requires at least one rankable candidate. Zero eligible candidates (including zero carrier records and all-`insufficient_data` results) uses `no_eligible_carriers`. Eligible candidates with zero rankable candidates uses `no_rankable_candidates`; it is a completed business outcome, not `failed`, and never misuses `no_eligible_carriers`.
 
 ---
 
@@ -354,6 +356,8 @@ Canonical tokens: All table names from Appendix A §A.3, all enum values from §
 | `created_at` | timestamptz | not null default now() |
 
 **Constraint:** unique (`recommendation_id`, `carrier_id`); index (`recommendation_id`, `rank`).
+
+**Component encoding (Task 004-H):** `component_scores` stores the four active components as four-decimal strings (`equipment_fit`, `capacity_timing`, `rate_competitiveness`, `data_completeness`) to avoid JSON number precision loss. `rate_competitiveness` is explicit JSON null when no usable rate or no maximum buy ceiling exists; it is never `0` or a neutral value. The deferred canonical components `lane_familiarity` and `reliability` are present as explicit nulls and are never numeric. Ineligible and `insufficient_data` candidates store `{}` because they are not scored. `total_score` and `rank` remain null for every eligible-unrankable candidate.
 
 ---
 
