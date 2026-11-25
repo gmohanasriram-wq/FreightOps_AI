@@ -1,0 +1,46 @@
+<!-- Validation Result Card (Rendered via HTMX or on page load) -->
+<div class="rounded-xl border {% if result == 'passed' %}border-emerald-500/40 bg-emerald-950/20{% elif result == 'passed_with_warnings' %}border-amber-500/40 bg-amber-950/20{% else %}border-rose-500/40 bg-rose-950/20{% endif %} p-5 space-y-4">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
+                {% if result == 'passed' %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30
+                {% elif result == 'passed_with_warnings' %}bg-amber-500/20 text-amber-300 border border-amber-500/30
+                {% else %}bg-rose-500/20 text-rose-300 border border-rose-500/30{% endif %}">
+                {% if result == 'passed' %}✓ PASSED
+                {% elif result == 'passed_with_warnings' %}⚠ PASSED WITH WARNINGS
+                {% else %}✕ VALIDATION FAILED{% endif %}
+            </span>
+            <span class="text-xs text-slate-400">Rules Engine v{{ rules_version or '2026.1' }}</span>
+        </div>
+        <span class="text-xs text-slate-500">{{ checked_at }}</span>
+    </div>
+
+    {% if issues and issues|length > 0 %}
+    <div class="space-y-2">
+        <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Diagnostic Issues ({{ issues|length }})</h4>
+        <div class="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {% for issue in issues %}
+            <div class="flex items-start justify-between p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-xs">
+                <div class="space-y-1">
+                    <div class="flex items-center space-x-2">
+                        <span class="font-mono text-indigo-400 font-semibold">{{ issue.rule_code }}</span>
+                        <span class="text-slate-500">•</span>
+                        <span class="text-slate-300 font-medium">{{ issue.field }}</span>
+                    </div>
+                    <p class="text-slate-300">{{ issue.message }}</p>
+                </div>
+                <span class="ml-3 px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                    {% if issue.severity == 'critical' %}bg-rose-900/80 text-rose-200 border border-rose-700
+                    {% elif issue.severity == 'error' %}bg-red-900/60 text-red-300 border border-red-700/60
+                    {% elif issue.severity == 'warning' %}bg-amber-900/60 text-amber-300 border border-amber-700/60
+                    {% else %}bg-blue-900/60 text-blue-300 border border-blue-700/60{% endif %}">
+                    {{ issue.severity }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <p class="text-xs text-emerald-400 font-medium">All deterministic booking readiness checks passed. This shipment meets all criteria to proceed to carrier sourcing.</p>
+    {% endif %}
+</div>

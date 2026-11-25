@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}Shipment {{ shipment.id }} — FreightOps AI{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Top Breadcrumb & Status Header -->
+    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+            <div class="flex items-center space-x-2 text-xs text-slate-400">
+                <a href="/shipments" class="text-indigo-400 hover:text-indigo-300 font-medium">Shipments</a>
+                <span>/</span>
+                <span class="font-mono text-slate-300">{{ shipment.id }}</span>
+            </div>
+            <div class="flex items-center space-x-3 mt-2">
+                <h1 class="text-2xl font-bold tracking-tight text-white">
+                    {{ shipment.commodity or 'Unspecified Freight' }}
+                </h1>
+                <span id="shipment-status-badge" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
+                    {% if shipment.status == 'validated' %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30
+                    {% elif shipment.status == 'validation_failed' %}bg-rose-500/20 text-rose-300 border border-rose-500/30
+                    {% elif shipment.status == 'draft' %}bg-slate-500/20 text-slate-300 border border-slate-500/30
+                    {% elif shipment.status == 'sourcing' %}bg-cyan-500/20 text-cyan-300 border border-cyan-500/30
+                    {% elif shipment.status == 'booking_proposed' %}bg-purple-500/20 text-purple-300 border border-purple-500/30
+                    {% elif shipment.status == 'approved' %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30
+                    {% else %}bg-indigo-500/20 text-indigo-300 border border-indigo-500/30{% endif %}">
+                    {{ shipment.status|upper }}
+                </span>
+                <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                    v{{ shipment.version }}
+                </span>
+                {% if shipment.frozen_at %}
+                <span class="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center space-x-1">
+                    <span>🔒 Terms Frozen</span>
+                </span>
+                {% endif %}
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+                Source: <span class="font-mono text-slate-300">{{ shipment.source }}</span> • Lane: <span class="text-slate-200 font-medium">{{ shipment.lane_origin or '—' }} → {{ shipment.lane_destination or '—' }}</span>
+            </p>
+        </div>
+
+        <!-- Header Actions: Run Validation Button -->
+        <div class="flex items-center space-x-3">
+            <button
+                hx-post="/shipments/{{ shipment.id }}/validation"
+                hx-headers='{"X-CSRF-Token": {{ (csrf_token or "") | tojson }}}'
+                hx-target="#validation-container"
+                hx-swap="innerHTML"
+                hx-indicator="#validation-spinner"
+                class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition shadow-md shadow-indigo-600/30 flex items-center space-x-2 cursor-pointer"
+            >
+                <svg id="validation-spinner" class="w-4 h-4 htmx-indicator animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Run Validation Engine</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Live Validation Container (HTMX Target) -->
+    <div id="validation-container">
+        {% if latest_validation %}
+            {% set result = latest_validation.result %}
+            {% set issues = latest_validation.issues %}
+            {% set rules_version = latest_validation.rules_version %}
+            {% set checked_at = latest_validation.checked_at.strftime('%Y-%m-%d %H:%M:%S UTC') if latest_validation.checked_at else 'Just now' %}
+            {% include "partials/validation_results.html" %}
+        {% else %}
+            <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/60 text-xs text-slate-400 flex items-center justify-between">
+                <span>No validation run recorded yet. Click <strong>Run Validation Engine</strong> to execute deterministic booking readiness checks.</span>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Edit Form for Mutable Shipment Fields -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-6">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h2 class="text-base font-semibold text-white">Shipment Specifications</h2>
+            <span class="text-xs text-slate-500">
+                {% if shipment.frozen_at %}Read-only (Frozen){% else %}Editable Draft{% endif %}
+            </span>
+        </div>
+
+        <form method="POST" action="/shipments/{{ shipment.id }}/edit" class="space-y-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Equipment Type *</label>
+                    <select
+                        name="equipment_type"
+                        {% if shipment.frozen_at %}disabled{% endif %}
+                        class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-100 text-sm focus:border-indigo-500 focus:outline-none"
+                    >
+                        <option value="" {% if not shipment.equipment_type %}selected{% endif %}>Select Equipment...</option>
+                        <option value="dry_van" {% if shipment.equipment_type == 'dry_van' %}selected{% endif %}>dry_van (Standard Trailer)</option>
+                        <option value="reefer" {% if shipment.equipment_type == 'reefer' %}selected{% endif %}>reefer (Refrigerated)</option>
+                        <option value="flatbed" {% if shipment.equipment_type == 'flatbed' %}selected{% endif %}>flatbed (Open Deck)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Commodity *</label>
+                    <input
+                        type="text"
+                        name="commodity"
+                        value="{{ shipment.commodity or '' }}"
+                        placeholder="e.g. Frozen Poultry, Paper Rolls"
+                        {% if shipment.frozen_at %}disabled{% endif %}
+                        class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-100 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Weight (lbs) *</label>
+                    <input
+                        type="number"
+                        name="weight_lbs"
+                        value="{{ shipment.weight_lbs or '' }}"
+                        placeholder="e.g. 42000"
+                        {% if shipment.frozen_at %}disabled{% endif %}
+                        class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-100 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Target Sell Rate ($)</label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        name="target_sell_rate"
+                        value="{{ shipment.target_sell_rate or '' }}"
+                        placeholder="e.g. 2400.00"
+                        {% if shipment.frozen_at %}disabled{% endif %}
+                        class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-100 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Max Buy Rate ($)</label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        name="max_buy_rate"
+                        value="{{ shipment.max_buy_rate or '' }}"
+                        placeholder="e.g. 2100.00"
+                        {% if shipment.frozen_at %}disabled{% endif %}
+                        class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-100 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Reference / PO #</label>
+                    <input
+                        type="text"
+                        name="reference_number"
+                        value="{{ shipment.reference_number or '' }}"
+                        placeholder="e.g. PO-99120"
+                        {% if shipment.frozen_at %}disabled{% endif %}
+                        class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-100 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                </div>
+            </div>
+
+            <!-- Special Requirements (JSONB) Section -->
+            <div class="border-t border-slate-800 pt-4 space-y-3">
+                <h3 class="text-sm font-semibold text-slate-200">Requirements & Temperature Controls</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+                    <div>
+                        <label class="block font-medium text-slate-400 mb-1">Min Temp (°F)</label>
+                        <input
+                            type="number"
+                            step="0.1"
+                            name="temp_min_f"
+                            value="{{ shipment.requirements.temperature_range.min_f if shipment.requirements and shipment.requirements.temperature_range else '' }}"
+                            placeholder="e.g. 34.0"
+                            {% if shipment.frozen_at %}disabled{% endif %}
+                            class="w-full rounded bg-slate-950 border border-slate-800 p-2 text-slate-100"
+                        />
+                    </div>
+                    <div>
+                        <label class="block font-medium text-slate-400 mb-1">Max Temp (°F)</label>
+                        <input
+                            type="number"
+                            step="0.1"
+                            name="temp_max_f"
+                            value="{{ shipment.requirements.temperature_range.max_f if shipment.requirements and shipment.requirements.temperature_range else '' }}"
+                            placeholder="e.g. 38.0"
+                            {% if shipment.frozen_at %}disabled{% endif %}
+                            class="w-full rounded bg-slate-950 border border-slate-800 p-2 text-slate-100"
+                        />
+                    </div>
+                    <div class="flex items-center space-x-2 pt-6">
+                        <input
+                            type="checkbox"
+                            id="hazmat"
+                            name="hazmat"
+                            value="true"
+                            {% if shipment.requirements and shipment.requirements.hazmat %}checked{% endif %}
+                            {% if shipment.frozen_at %}disabled{% endif %}
+                            class="rounded border-slate-800 text-indigo-600 focus:ring-0"
+                        />
+                        <label for="hazmat" class="text-slate-300 font-medium">Hazmat Cargo</label>
+                    </div>
+                    <div class="flex items-center space-x-2 pt-6">
+                        <input
+                            type="checkbox"
+                            id="appointment"
+                            name="appointment"
+                            value="true"
+                            {% if shipment.requirements and shipment.requirements.appointment %}checked{% endif %}
+                            {% if shipment.frozen_at %}disabled{% endif %}
+                            class="rounded border-slate-800 text-indigo-600 focus:ring-0"
+                        />
+                        <label for="appointment" class="text-slate-300 font-medium">Appointment Required</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Operational Notes -->
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Operational Notes</label>
+                <textarea
+                    name="notes"
+                    rows="2"
+                    {% if shipment.frozen_at %}disabled{% endif %}
+                    class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-100 text-sm focus:border-indigo-500 focus:outline-none"
+                    placeholder="Dispatch instructions, pallet count, driver requirements..."
+                >{{ shipment.notes or '' }}</textarea>
+            </div>
+
+            {% if not shipment.frozen_at %}
+            <div class="flex justify-end pt-2">
+                <button
+                    type="submit"
+                    class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition shadow"
+                >
+                    Save Specifications
+                </button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Stops Aggregates Section -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+                <h2 class="text-base font-semibold text-white">Stops & Scheduling ({{ stops|length }})</h2>
+                <p class="text-xs text-slate-400">At least one pickup and one delivery stop required (DEF-01).</p>
+            </div>
+        </div>
+
+        {% if stops and stops|length > 0 %}
+        <div class="space-y-3">
+            {% for stop in stops %}
+            <div class="p-4 rounded-lg bg-slate-950 border border-slate-800 flex items-start justify-between text-xs">
+                <div class="space-y-1">
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                            {% if stop.stop_type == 'pickup' %}bg-emerald-900/60 text-emerald-300 border border-emerald-700/60
+                            {% else %}bg-purple-900/60 text-purple-300 border border-purple-700/60{% endif %}">
+                            Stop {{ stop.sequence }}: {{ stop.stop_type }}
+                        </span>
+                        <span class="font-semibold text-slate-200 text-sm">{{ stop.name or 'Unassigned Facility' }}</span>
+                    </div>
+                    <div class="text-slate-400">
+                        {{ stop.address_line1 or 'No street address' }}, {{ stop.city or '—' }}, {{ stop.state or '—' }} {{ stop.postal_code or '' }}
+                    </div>
+                    <div class="text-slate-400 flex items-center space-x-3 pt-1">
+                        <span>Window: <strong>{{ stop.window_start.strftime('%Y-%m-%d %H:%M') if stop.window_start else '—' }}</strong> to <strong>{{ stop.window_end.strftime('%Y-%m-%d %H:%M') if stop.window_end else '—' }}</strong></span>
+                        {% if stop.appointment_required %}
+                        <span class="text-amber-400 font-medium">Appointment Required</span>
+                        {% endif %}
+                        {% if stop.contact_phone %}
+                        <span>Phone: {{ stop.contact_phone }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-lg">
+            No stops defined yet. Use the API or quick sample below to configure pickup and delivery stops.
+        </div>
+        {% endif %}
+
+        {% if not shipment.frozen_at %}
+        <!-- Quick Sample Stop Generator for Demo -->
+        <form method="POST" action="/shipments/{{ shipment.id }}/seed-sample-stops" class="pt-2 flex justify-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+            <button
+                type="submit"
+                class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs text-indigo-300 font-medium border border-slate-700 cursor-pointer"
+            >
+                + Populate Standard Chicago &rarr; Dallas Stops
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

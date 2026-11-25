@@ -1,0 +1,156 @@
+<!-- HTMX Swappable Partial: Health Status Container -->
+<div class="space-y-6">
+    <!-- Blocker Banner if Database is Unavailable -->
+    {% if not db_connected %}
+    <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5 text-amber-200">
+        <div class="flex items-start space-x-3">
+            <svg class="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="space-y-2 flex-1">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-semibold text-amber-300">
+                        PostgreSQL Connection Pending
+                    </h3>
+                    <span class="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
+                        port {{ db_details.port }}
+                    </span>
+                </div>
+                <p class="text-sm text-amber-200/90 leading-relaxed">
+                    Database status is reported accurately: <code class="bg-amber-950/60 px-1.5 py-0.5 rounded font-mono text-xs">{{ db_message }}</code>.
+                </p>
+                {% if instructions %}
+                <div class="bg-slate-950/80 rounded-lg p-3 border border-amber-500/20 text-xs font-mono space-y-1 text-slate-300">
+                    <p class="text-amber-400 font-semibold mb-1">Setup Instructions:</p>
+                    <p class="text-slate-400"># Docker:</p>
+                    <p class="text-emerald-400 select-all">docker-compose up -d db</p>
+                    <p class="text-slate-400 mt-1"># Or automated local portable runner:</p>
+                    <p class="text-emerald-400 select-all">python freightops-ai/scripts/setup_postgres.py</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Success Banner if Database is Connected -->
+    <div class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 sm:p-5 text-emerald-200">
+        <div class="flex items-center space-x-3">
+            <svg class="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+                <h3 class="font-semibold text-emerald-300">PostgreSQL 16+ Connected</h3>
+                <p class="text-sm text-emerald-200/90">
+                    Verified live query: <span class="font-mono text-xs">{{ db_details.server_version }}</span>
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 3-Column Diagnostic Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Card 1: Backend API Service -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4 shadow-sm hover:border-slate-700 transition">
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-medium text-slate-400">Backend Service</span>
+                <span class="text-xs font-semibold px-2 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                    HEALTHY
+                </span>
+            </div>
+
+            <div>
+                <div class="text-2xl font-bold text-white tracking-tight">FastAPI 0.165.0</div>
+                <p class="text-xs text-slate-400 mt-1">Uvicorn ASGI • Python 3.14.5 Host</p>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-300 font-mono">
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">Environment:</span>
+                    <span class="text-slate-300">{{ environment }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">API Version:</span>
+                    <span class="text-slate-300">{{ version }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">Health Path:</span>
+                    <span class="text-slate-300">/api/v1/health</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 2: PostgreSQL Database -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4 shadow-sm hover:border-slate-700 transition">
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-medium text-slate-400">PostgreSQL Database</span>
+                <span class="text-xs font-semibold px-2 py-0.5 rounded-full border {% if db_connected %}bg-emerald-500/10 text-emerald-400 border-emerald-500/20{% else %}bg-amber-500/10 text-amber-400 border-amber-500/20{% endif %}">
+                    {% if db_connected %}CONNECTED{% else %}UNAVAILABLE{% endif %}
+                </span>
+            </div>
+
+            <div>
+                <div class="text-2xl font-bold text-white tracking-tight">PostgreSQL 16+</div>
+                <p class="text-xs text-slate-400 mt-1">SQLAlchemy 2.x • psycopg 3.3.9</p>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-300 font-mono">
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">Host:Port:</span>
+                    <span class="text-slate-300">{{ db_details.host }}:{{ db_details.port }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">Database:</span>
+                    <span class="text-slate-300">{{ db_details.database }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">Live Status:</span>
+                    <span class="{% if db_connected %}text-emerald-400{% else %}text-amber-400{% endif %}">
+                        {{ db_status }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: Platform Architecture -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4 shadow-sm hover:border-slate-700 transition">
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-medium text-slate-400">Platform Spec</span>
+                <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                    CONTRACT 2.2
+                </span>
+            </div>
+
+            <div>
+                <div class="text-2xl font-bold text-white tracking-tight">Modular Monolith</div>
+                <p class="text-xs text-slate-400 mt-1">Jinja2 + HTMX UI (ADR-003)</p>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-300 font-mono">
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">Tables:</span>
+                    <span class="text-slate-300">21 Canonical</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">Workflow Nodes:</span>
+                    <span class="text-slate-300">16 Canonical</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500 font-sans">Requirements:</span>
+                    <span class="text-slate-300">95 MVP / 156 Total</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Polling Metadata Banner -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-4 flex items-center justify-between text-xs text-slate-400">
+        <div class="flex items-center space-x-2">
+            <span class="inline-block h-2 w-2 rounded-full {% if db_connected %}bg-emerald-400{% else %}bg-amber-400{% endif %}"></span>
+            <span>HTMX Live Polling: <strong class="text-slate-200">Active (every 10s)</strong></span>
+        </div>
+        <div>
+            <span>Evaluated at: <strong class="text-slate-200 font-mono">{{ evaluated_at }}</strong></span>
+        </div>
+    </div>
+</div>

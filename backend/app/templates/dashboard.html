@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}FreightOps AI — System Overview & Health{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Live HTMX Polling Container -->
+    <div
+        id="health-status-container"
+        hx-get="/ui/partials/health-status"
+        hx-trigger="every 10s"
+        hx-swap="innerHTML"
+    >
+        {% include "partials/health_status.html" %}
+    </div>
+
+    <!-- Contract 2.2 Foundation Highlights -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900/30 p-6 space-y-4">
+        <h2 class="text-base font-semibold text-white">Contract 2.2 Architecture Alignment (ADR-003)</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-300">
+            <div class="space-y-2 p-4 rounded-lg bg-slate-900/50 border border-slate-800">
+                <div class="flex items-center space-x-2 text-indigo-400 font-semibold">
+                    <span class="h-2 w-2 rounded-full bg-indigo-400"></span>
+                    <span>Server-Rendered Jinja2 UI</span>
+                </div>
+                <ul class="list-disc list-inside space-y-1 text-slate-400 pl-1 leading-relaxed">
+                    <li>Eliminates Node.js build pipeline complexity (ADR-003).</li>
+                    <li>Served directly by FastAPI from <code class="text-slate-200">backend/app/templates</code>.</li>
+                    <li>Reactivity powered by HTMX 1.9.12 with zero heavy client frameworks.</li>
+                    <li>Clean broker review screens with native HTML forms and CSRF protection.</li>
+                </ul>
+            </div>
+
+            <div class="space-y-2 p-4 rounded-lg bg-slate-900/50 border border-slate-800">
+                <div class="flex items-center space-x-2 text-indigo-400 font-semibold">
+                    <span class="h-2 w-2 rounded-full bg-indigo-400"></span>
+                    <span>PostgreSQL 16+ System of Record</span>
+                </div>
+                <ul class="list-disc list-inside space-y-1 text-slate-400 pl-1 leading-relaxed">
+                    <li>21 authoritative tables planned per Contract 2.2 schema specification.</li>
+                    <li>SQLAlchemy 2.x ORM engine with <code class="text-slate-200">psycopg 3.3.9</code> async/sync driver.</li>
+                    <li>Trigger-enforced immutable audit logs (<code class="text-slate-200">audit_events</code>).</li>
+                    <li>No mock fallbacks; live database status is verified deterministically.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FreightOps AI — Freight Brokerage Operations Platform{% endblock %}</title>
+    <!-- Session-bound CSRF token for HTMX and form submissions -->
+    <meta name="csrf-token" content="{{ csrf_token or '' }}">
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX 1.9.12 for reactive AJAX swaps without JS build pipeline (ADR-003) -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <style>
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-flex; }
+        .htmx-request.htmx-indicator { display: inline-flex; }
+    </style>
+</head>
+<body class="min-h-full bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+
+    <!-- Top Application Shell Header -->
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="h-10 w-10 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-indigo-600/30">
+                    FO
+                </div>
+                <div>
+                    <div className="flex items-center space-x-2">
+                        <span class="font-bold text-lg text-white tracking-tight">FreightOps AI</span>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                            Contract 2.2
+                        </span>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Jinja2 + HTMX (ADR-003)
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400">Autonomous Freight Brokerage Operations Platform</p>
+                </div>
+            </div>
+
+            <!-- Quick Status Pill & Manual Trigger -->
+            <div class="flex items-center space-x-3 text-xs">
+                <button
+                    hx-get="/ui/partials/health-status"
+                    hx-target="#health-status-container"
+                    hx-swap="innerHTML"
+                    class="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition cursor-pointer flex items-center space-x-1.5 shadow"
+                >
+                    <svg class="w-3.5 h-3.5 htmx-indicator animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Refresh Health</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="border-t border-slate-800/80 bg-slate-900/40">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-8 text-sm">
+                <a href="/" class="py-2.5 {% if active_tab == 'health' or not active_tab %}border-b-2 border-indigo-500 text-indigo-400 font-medium{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                    System Health & Diagnostics (PH-1)
+                </a>
+                <a href="/shipments" class="py-2.5 {% if active_tab == 'shipments' %}border-b-2 border-indigo-500 text-indigo-400 font-medium{% else %}text-slate-400 hover:text-slate-200{% endif %} flex items-center space-x-1.5">
+                    <span>Shipments & Intake</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-indigo-900/60 text-indigo-300 border border-indigo-700/50">PH-3</span>
+                </a>
+                <span class="py-2.5 text-slate-500 cursor-not-allowed flex items-center space-x-1.5">
+                    <span>Carriers & Eligibility</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">PH-3</span>
+                </span>
+                <span class="py-2.5 text-slate-500 cursor-not-allowed flex items-center space-x-1.5">
+                    <span>Scoring & Approvals</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">PH-4</span>
+                </span>
+                <span class="py-2.5 text-slate-500 cursor-not-allowed flex items-center space-x-1.5">
+                    <span>Agent Orchestrator</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">PH-5</span>
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 bg-slate-950/80 py-4 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
+            FreightOps AI • Server-rendered Jinja2 UI + HTMX • Contract 2.2 Baseline
+        </div>
+    </footer>
+</body>
+</html>

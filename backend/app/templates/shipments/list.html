@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Shipments & Intake — FreightOps AI{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white">Shipments & Intake</h1>
+            <p class="text-sm text-slate-400 mt-1">Manage draft shipments, intake submissions, and deterministic validation.</p>
+        </div>
+        <div class="flex items-center space-x-3">
+            <a href="/shipments/new" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition shadow-md shadow-indigo-600/30 flex items-center space-x-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                <span>+ New Intake</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Filters & Search Bar -->
+    <div class="flex items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-800 text-sm">
+        <div class="flex items-center space-x-2">
+            <span class="text-xs uppercase font-bold tracking-wider text-slate-500 mr-2">Status:</span>
+            <a href="/shipments" class="px-3 py-1 rounded-md text-xs font-medium {% if not current_status %}bg-indigo-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">All ({{ total }})</a>
+            <a href="/shipments?status=draft" class="px-3 py-1 rounded-md text-xs font-medium {% if current_status == 'draft' %}bg-indigo-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Draft</a>
+            <a href="/shipments?status=validated" class="px-3 py-1 rounded-md text-xs font-medium {% if current_status == 'validated' %}bg-indigo-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Validated</a>
+            <a href="/shipments?status=validation_failed" class="px-3 py-1 rounded-md text-xs font-medium {% if current_status == 'validation_failed' %}bg-indigo-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Failed Validation</a>
+            <a href="/shipments?status=sourcing" class="px-3 py-1 rounded-md text-xs font-medium {% if current_status == 'sourcing' %}bg-indigo-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Sourcing</a>
+            <a href="/shipments?status=booking_proposed" class="px-3 py-1 rounded-md text-xs font-medium {% if current_status == 'booking_proposed' %}bg-indigo-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Booking Proposed</a>
+        </div>
+        <div class="text-xs text-slate-500">
+            Showing {{ shipments|length }} of {{ total }} records
+        </div>
+    </div>
+
+    <!-- Shipments Table -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden shadow">
+        <table class="w-full text-left text-sm">
+            <thead class="bg-slate-950/80 border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider">
+                <tr>
+                    <th class="px-6 py-3.5 font-semibold">Shipment</th>
+                    <th class="px-6 py-3.5 font-semibold">Status</th>
+                    <th class="px-6 py-3.5 font-semibold">Lane</th>
+                    <th class="px-6 py-3.5 font-semibold">Equipment / Weight</th>
+                    <th class="px-6 py-3.5 font-semibold">Commodity</th>
+                    <th class="px-6 py-3.5 font-semibold">Created</th>
+                    <th class="px-6 py-3.5 text-right font-semibold">Action</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60">
+                {% if shipments and shipments|length > 0 %}
+                    {% for s in shipments %}
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="px-6 py-4">
+                            <div class="font-mono text-xs text-indigo-400 font-semibold">{{ s.id }}</div>
+                            <div class="text-xs text-slate-400 mt-0.5">Ref: {{ s.reference_number or '—' }} (v{{ s.version }})</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                {% if s.status == 'validated' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+                                {% elif s.status == 'validation_failed' %}bg-rose-500/10 text-rose-400 border border-rose-500/20
+                                {% elif s.status == 'draft' %}bg-slate-500/10 text-slate-400 border border-slate-500/20
+                                {% elif s.status == 'sourcing' %}bg-cyan-500/10 text-cyan-400 border border-cyan-500/20
+                                {% elif s.status == 'booking_proposed' %}bg-purple-500/10 text-purple-400 border border-purple-500/20
+                                {% elif s.status == 'approved' %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+                                {% else %}bg-indigo-500/10 text-indigo-400 border border-indigo-500/20{% endif %}">
+                                {{ s.status }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-xs">
+                            {% if s.lane_origin or s.lane_destination %}
+                            <div class="font-medium text-slate-200">{{ s.lane_origin or '—' }} → {{ s.lane_destination or '—' }}</div>
+                            {% else %}
+                            <span class="text-slate-500 italic">No stops configured</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-xs text-slate-300">
+                            <div><span class="font-mono text-slate-400">{{ s.equipment_type or 'unspecified' }}</span></div>
+                            <div class="text-slate-400">{{ s.weight_lbs ~ ' lbs' if s.weight_lbs else '—' }}</div>
+                        </td>
+                        <td class="px-6 py-4 text-xs text-slate-300">
+                            {{ s.commodity or '—' }}
+                        </td>
+                        <td class="px-6 py-4 text-xs text-slate-500">
+                            {{ s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '—' }}
+                        </td>
+                        <td class="px-6 py-4 text-right text-xs">
+                            <a href="/shipments/{{ s.id }}" class="inline-flex items-center px-3 py-1.5 rounded-md bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white font-medium transition cursor-pointer">
+                                Manage →
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-12 text-center text-slate-500 text-sm">
+                            No shipments found. Click <a href="/shipments/new" class="text-indigo-400 underline font-medium">New Intake</a> to create the first draft shipment.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

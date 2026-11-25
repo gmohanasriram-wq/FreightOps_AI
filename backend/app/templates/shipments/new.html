@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}New Intake Submission — FreightOps AI{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center space-x-2">
+                <a href="/shipments" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">← Back to Shipments</a>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight text-white mt-2">New Shipment Intake</h1>
+            <p class="text-sm text-slate-400 mt-1">Paste unstructured load request text to persist intake and create an initial draft shipment (Contract 2.2 §5.1, DF-01).</p>
+        </div>
+    </div>
+
+    <!-- Error Banner (if any) -->
+    {% if error %}
+    <div class="p-4 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-sm flex items-center space-x-3">
+        <svg class="w-5 h-5 text-rose-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+            <span class="font-semibold">{{ error_title or 'Submission Error' }}:</span> {{ error }}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Intake Paste Form -->
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-5">
+        <form method="POST" action="/shipments/new" class="space-y-5">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+            <div class="flex items-center justify-between">
+                <label for="raw_text" class="block text-sm font-semibold text-slate-200">
+                    Unstructured Request Text <span class="text-rose-400">*</span>
+                </label>
+                <button
+                    type="button"
+                    onclick="insertSampleIntake()"
+                    class="text-xs text-indigo-400 hover:text-indigo-300 font-medium underline"
+                >
+                    Paste Reefer Demo Sample
+                </button>
+            </div>
+
+            <div>
+                <textarea
+                    id="raw_text"
+                    name="raw_text"
+                    rows="7"
+                    required
+                    class="w-full rounded-lg bg-slate-950 border border-slate-800 p-3 text-slate-100 text-sm font-mono focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder-slate-600 focus:outline-none"
+                    placeholder="e.g. Need reefer pickup in Chicago IL on Monday 11/24 08:00, delivery Dallas TX Wednesday 11/26 12:00. 42000 lbs frozen poultry, 34-38F. Target $2400."
+                ></textarea>
+                <p class="text-xs text-slate-500 mt-1.5">Max 100 KB text payload. Content is hashed with SHA-256 for idempotent deduplication.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                    <label for="channel" class="block text-xs font-semibold text-slate-400 mb-1">Intake Channel</label>
+                    <select
+                        id="channel"
+                        name="channel"
+                        class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-200 text-sm focus:border-indigo-500 focus:outline-none"
+                    >
+                        <option value="paste" selected>paste (Operator Web UI)</option>
+                        <option value="rest_api">rest_api (API Integration)</option>
+                        <option value="manual">manual (Broker Entry)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="client_request_id" class="block text-xs font-semibold text-slate-400 mb-1">Client Reference / PO (Optional)</label>
+                    <input
+                        type="text"
+                        id="client_request_id"
+                        name="client_request_id"
+                        placeholder="e.g. CUST-LOAD-9021"
+                        class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-200 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                <div class="text-xs text-slate-500">
+                    Draft tolerance (DEF-01): Missing stops or customer details can be completed after draft creation.
+                </div>
+                <button
+                    type="submit"
+                    class="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition shadow-lg shadow-indigo-600/30 flex items-center space-x-2"
+                >
+                    <span>Submit & Create Draft →</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function insertSampleIntake() {
+    const sample = "Need reefer pickup in Chicago IL on 2026-11-24 between 08:00 and 12:00, delivery Dallas TX on 2026-11-26 between 08:00 and 17:00. 42000 lbs frozen poultry, temp 34-38F. Target sell $2400, max buy $2100. Reference PO-99120.";
+    document.getElementById("raw_text").value = sample;
+    document.getElementById("client_request_id").value = "PO-99120";
+}
+</script>
+{% endblock %}
