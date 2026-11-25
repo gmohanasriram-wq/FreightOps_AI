@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Approvals — FreightOps AI{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800 pb-4">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white">Human Broker Review Queue</h1>
+            <p class="text-xs text-slate-400 mt-1">
+                Recommendations reach Node 11 of the LangGraph workflow and pause there until a broker records a decision.
+                Every decision is written to the immutable audit log and resumes the graph.
+            </p>
+        </div>
+        <div class="flex gap-2 text-xs">
+            {% for value, label in [('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('changes_requested', 'Changes requested'), ('', 'All')] %}
+            <a href="/approvals{% if value %}?status_filter={{ value }}{% endif %}"
+               class="px-3 py-1.5 rounded-lg border font-semibold
+               {% if (current_status or '') == value %}bg-indigo-600 border-indigo-500 text-white{% else %}bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700{% endif %}">
+                {{ label }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="p-3 rounded-lg border border-rose-800 bg-rose-950/40 text-xs text-rose-300">
+        <strong>{{ error.code }}</strong> — {{ error.message }}
+    </div>
+    {% endif %}
+
+    {% if approvals %}
+    <div class="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-xs">
+                <thead class="text-slate-400 border-b border-slate-800 bg-slate-950/60">
+                    <tr>
+                        <th class="text-left py-3 px-4 font-semibold">Status</th>
+                        <th class="text-left py-3 px-4 font-semibold">Shipment</th>
+                        <th class="text-left py-3 px-4 font-semibold">Recommendation</th>
+                        <th class="text-left py-3 px-4 font-semibold">Requested</th>
+                        <th class="text-left py-3 px-4 font-semibold">Decided</th>
+                        <th class="text-left py-3 px-4 font-semibold">Decided by</th>
+                        <th class="text-right py-3 px-4 font-semibold"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/70">
+                    {% for approval in approvals %}
+                    <tr class="hover:bg-slate-950/40">
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                                {% if approval.status == 'pending' %}bg-amber-500/20 text-amber-300 border border-amber-500/30
+                                {% elif approval.status == 'approved' %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30
+                                {% else %}bg-rose-900/40 text-rose-300 border border-rose-800{% endif %}">
+                                {{ approval.status|replace('_', ' ') }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4">
+                            <a href="/shipments/{{ approval.shipment_id }}" class="text-indigo-400 hover:text-indigo-300 font-semibold">
+                                {{ approval.shipment_id }}
+                            </a>
+                            <div class="text-slate-500 font-mono text-[10px]">{{ approval.id }}</div>
+                        </td>
+                        <td class="py-3 px-4">
+                            <a href="/recommendations/{{ approval.recommendation_id }}#approval" class="text-indigo-400 hover:text-indigo-300 font-mono">
+                                {{ approval.recommendation_id }}
+                            </a>
+                        </td>
+                        <td class="py-3 px-4 text-slate-300">{{ approval.requested_at.strftime('%Y-%m-%d %H:%M') if approval.requested_at else '—' }}</td>
+                        <td class="py-3 px-4 text-slate-300">{{ approval.decided_at.strftime('%Y-%m-%d %H:%M') if approval.decided_at else '—' }}</td>
+                        <td class="py-3 px-4 text-slate-400 font-mono">{{ approval.decided_by or '—' }}</td>
+                        <td class="py-3 px-4 text-right">
+                            <a href="/recommendations/{{ approval.recommendation_id }}#approval"
+                               class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold">
+                                {{ 'Review' if approval.status == 'pending' else 'View' }}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="rounded-xl border border-slate-800 bg-slate-900 p-10 text-center">
+        <p class="text-sm text-slate-300">No approval records{% if current_status %} with status “{{ current_status|replace('_', ' ') }}”{% endif %}.</p>
+        <p class="text-xs text-slate-500 mt-1">Run a recommendation workflow on a validated shipment to create one.</p>
+        <a href="/shipments" class="inline-block mt-4 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">View shipments</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

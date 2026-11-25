@@ -1,0 +1,103 @@
+<div id="recommendation-panel" class="rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+            <h2 class="text-base font-semibold text-white">Carrier Recommendation</h2>
+            <p class="text-xs text-slate-400">
+                Deterministic eligibility, scoring, ranking, and audit trail. Every evaluated carrier is persisted.
+            </p>
+        </div>
+        {% if recommendation %}
+        <span class="text-xs px-2.5 py-1 rounded-full font-semibold
+            {% if recommendation.status == 'ready' %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30
+            {% elif recommendation.status in ('no_eligible_carriers', 'no_rankable_candidates') %}bg-amber-500/20 text-amber-300 border border-amber-500/30
+            {% else %}bg-slate-500/20 text-slate-300 border border-slate-500/30{% endif %}">
+            {{ recommendation.status|replace('_', ' ')|upper }}
+        </span>
+        {% endif %}
+    </div>
+
+    {% if error %}
+    <div class="p-3 rounded-lg border border-rose-800 bg-rose-950/40 text-xs text-rose-300">
+        <strong>{{ error.code }}</strong> — {{ error.message }}
+    </div>
+    {% endif %}
+
+    {% if execution %}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div class="p-3 rounded bg-slate-950 border border-slate-800">
+            <div class="text-slate-500">Workflow</div>
+            <div class="font-mono text-slate-200 mt-1 break-all">{{ execution.execution_id }}</div>
+        </div>
+        <div class="p-3 rounded bg-slate-950 border border-slate-800">
+            <div class="text-slate-500">Status</div>
+            <div class="font-semibold text-indigo-300 mt-1">{{ execution.status|replace('_', ' ')|upper }}</div>
+        </div>
+        <div class="p-3 rounded bg-slate-950 border border-slate-800">
+            <div class="text-slate-500">Current Node</div>
+            <div class="font-mono text-slate-200 mt-1">{{ execution.current_node or '—' }}</div>
+        </div>
+        <div class="p-3 rounded bg-slate-950 border border-slate-800">
+            <div class="text-slate-500">Outcome</div>
+            <div class="font-semibold text-slate-200 mt-1">{{ execution.outcome or 'in progress' }}</div>
+        </div>
+    </div>
+    {% if execution.error %}
+    <div class="p-3 rounded-lg border border-rose-800 bg-rose-950/40 text-xs text-rose-300">
+        <strong>{{ execution.error.code }}</strong> ({{ execution.error.node or 'workflow' }}) — {{ execution.error.message }}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if recommendation_view %}
+    <div class="space-y-2">
+        <p class="text-sm text-slate-200 leading-relaxed">{{ recommendation_view.explanation.template }}</p>
+        {% if recommendation_view.explanation.narration %}
+        <p class="text-xs text-indigo-200 leading-relaxed border-l-2 border-indigo-700 pl-3">
+            {{ recommendation_view.explanation.narration }}
+            <span class="text-slate-500">(optional narration by {{ recommendation_view.explanation.provider or 'provider' }})</span>
+        </p>
+        {% endif %}
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-xs">
+        <a href="/recommendations/{{ recommendation_view.recommendation_id }}"
+           class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 font-semibold border border-slate-700">
+            Open score breakdown &amp; exclusions ({{ recommendation_view.candidates|length }} eligible)
+        </a>
+        {% if approval and approval.status == 'pending' %}
+        <a href="/recommendations/{{ recommendation_view.recommendation_id }}#approval"
+           class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold">
+            Human approval required
+        </a>
+        {% elif approval %}
+        <span class="px-3 py-1.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+            Approval: <strong>{{ approval.status|replace('_', ' ') }}</strong>
+        </span>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="text-xs text-slate-400">
+        No recommendation has been generated for this shipment yet.
+    </div>
+    {% endif %}
+
+    {% if shipment.status in ('validated', 'sourcing') and not shipment.frozen_at %}
+    <form hx-post="/shipments/{{ shipment.id }}/recommendations"
+          hx-target="#recommendation-panel"
+          hx-swap="outerHTML"
+          hx-headers='{"X-CSRF-Token": {{ (csrf_token or "") | tojson }}}'
+          hx-indicator="#recommendation-spinner"
+          class="pt-1">
+        <button type="submit"
+                class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition shadow flex items-center space-x-2">
+            <svg id="recommendation-spinner" class="w-4 h-4 htmx-indicator animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>{{ 'Re-run Recommendation Workflow' if recommendation else 'Run Recommendation Workflow' }}</span>
+        </button>
+    </form>
+    {% elif not recommendation %}
+    <div class="text-xs text-slate-500">
+        A recommendation can be generated once the shipment is validated or sourcing.
+    </div>
+    {% endif %}
+</div>

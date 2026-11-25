@@ -13,14 +13,27 @@ from sqlalchemy.orm import Session
 from backend.app.core.auth import (
     ensure_demo_users_seeded,
     get_session_csrf_token,
+    get_session_record,
     require_csrf_for_ui,
 )
 from backend.app.core.config import settings
 from backend.app.db.session import check_database_connection, get_db
 from backend.app.domain.validation.engine import RULES_VERSION, ValidationEngine
+from backend.app.models.approval import Approval
+from backend.app.models.recommendation import Recommendation
 from backend.app.models.shipment import IntakeSubmission, Shipment, ShipmentStop, ValidationRun
 from backend.app.models.user import User
+from backend.app.models.workflow import WorkflowExecution
+from backend.app.services.approvals import ApprovalError
 from backend.app.services.audit import emit_audit_event
+from backend.app.services.recommendation_views import serialize_recommendation
+from backend.app.workflows.runtime import InvalidWorkflowTransition
+from backend.app.workflows.service import (
+    ShipmentNotFoundForWorkflow,
+    get_execution,
+    start_workflow,
+    submit_approval_decision,
+)
 
 router = APIRouter(tags=["ui"])
 
@@ -31,6 +44,75 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 def get_session_csrf(request: Request) -> Optional[str]:
     """Return the CSRF token bound to the request's session cookie, if any."""
     return get_session_csrf_token(request.cookies.get("session_id"))
+
+
+def resolve_ui_actor(request: Request, db: Session) -> Optional[User]:
+    """Resolve the browser session user, falling back to the demo broker.
+
+    The UI is a demonstration surface; when no browser session exists a human
+    still has to click the decision control, and the fallback keeps the local
+    demo usable without a login page. API routes enforce real authentication.
+    """
+    ensure_demo_users_seeded(db)
+    record = get_session_record(request.cookies.get("session_id"))
+    if record is not None:
+        user = db.get(User, record.user_id)
+        if user is not None and user.is_active:
+            return user
+    return db.execute(select(User).where(User.role == "broker")).scalar_one_or_none()
+
+
+def latest_recommendation(db: Session, shipment_id: uuid.UUID) -> Optional[Recommendation]:
+    return db.scalars(
+        select(Recommendation)
+        .where(Recommendation.shipment_id == shipment_id)
+        .order_by(desc(Recommendation.created_at))
+        .limit(1)
+    ).first()
+
+
+def approval_for_recommendation(
+    db: Session, recommendation: Optional[Recommendation]
+) -> Optional[Approval]:
+    if recommendation is None:
+        return None
+    return db.scalars(
+        select(Approval)
+        .where(Approval.recommendation_id == recommendation.id)
+        .order_by(desc(Approval.requested_at))
+        .limit(1)
+    ).first()
+
+
+def latest_execution(db: Session, shipment_id: uuid.UUID) -> Optional[WorkflowExecution]:
+    return db.scalars(
+        select(WorkflowExecution)
+        .where(WorkflowExecution.shipment_id == shipment_id)
+        .order_by(desc(WorkflowExecution.started_at))
+        .limit(1)
+    ).first()
+
+
+def recommendation_panel_context(db: Session, shipment: Shipment) -> Dict[str, Any]:
+    recommendation = latest_recommendation(db, shipment.id)
+    execution = latest_execution(db, shipment.id)
+    snapshot = None
+    if execution is not None:
+        try:
+            snapshot = get_execution(execution.id)
+        except Exception:  # noqa: BLE001 - panel rendering must not fail the page
+            snapshot = None
+    return {
+        "shipment": shipment,
+        "recommendation": recommendation,
+        "recommendation_view": (
+            serialize_recommendation(db, recommendation)
+            if recommendation is not None
+            else None
+        ),
+        "approval": approval_for_recommendation(db, recommendation),
+        "execution": snapshot,
+    }
 
 
 def get_health_context(request: Request) -> Dict[str, Any]:
@@ -238,6 +320,7 @@ def shipment_detail_view(
             "stops": stops,
             "latest_validation": latest_validation,
             "csrf_token": get_session_csrf(request),
+            **recommendation_panel_context(db, shipment),
         },
     )
 
@@ -476,3 +559,193 @@ def seed_sample_stops(
     db.commit()
 
     return RedirectResponse(url=f"/shipments/{shipment_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---------------------------------------------------------------------------
+# Recommendation workflow and human approval UI (PH-4 / PH-5)
+# ---------------------------------------------------------------------------
+def _panel_error(message: str, code: str = "WORKFLOW_ERROR") -> Dict[str, str]:
+    return {"code": code, "message": message, "node": None, "retryable": False}
+
+
+@router.post("/shipments/{shipment_id}/recommendations", response_class=HTMLResponse)
+def start_recommendation_htmx(
+    request: Request,
+    shipment_id: uuid.UUID,
+    _csrf: None = Depends(require_csrf_for_ui),
+    db: Session = Depends(get_db),
+):
+    """Run the real bounded workflow and return the live panel."""
+    shipment = db.get(Shipment, shipment_id)
+    if shipment is None:
+        return HTMLResponse(
+            "<div class='p-4 rounded-xl border border-rose-800 bg-rose-950/40 text-rose-300 text-sm'>"
+            "Shipment not found.</div>",
+            status_code=404,
+        )
+
+    error: Optional[Dict[str, Any]] = None
+    if shipment.frozen_at is not None or shipment.status not in ("validated", "sourcing"):
+        error = _panel_error(
+            f"Shipment status '{shipment.status}' cannot start a recommendation workflow. "
+            "A validated or sourcing shipment is required.",
+            code="INVALID_SHIPMENT_STATUS",
+        )
+    else:
+        try:
+            start_workflow(
+                shipment.id,
+                trace_id=f"ui-{uuid.uuid4().hex[:12]}",
+                idempotency_key=f"ui-recommendation:{uuid.uuid4()}",
+            )
+        except (ShipmentNotFoundForWorkflow, InvalidWorkflowTransition) as exc:
+            error = _panel_error(str(exc))
+        except Exception as exc:  # noqa: BLE001 - render the failure in the panel
+            error = _panel_error(str(exc)[:1000], code="WORKFLOW_EXECUTION_ERROR")
+
+    db.expire_all()
+    shipment = db.get(Shipment, shipment_id)
+    context = recommendation_panel_context(db, shipment) if shipment else {}
+    context.update(
+        {
+            "request": request,
+            "csrf_token": get_session_csrf(request),
+            "error": error,
+        }
+    )
+    return templates.TemplateResponse(
+        request=request, name="partials/recommendation_panel.html", context=context
+    )
+
+
+@router.get("/recommendations/{recommendation_id}", response_class=HTMLResponse)
+def recommendation_detail_view(
+    request: Request,
+    recommendation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """Render the ranked scorecard, exclusion reasons, and approval controls."""
+    recommendation = db.get(Recommendation, recommendation_id)
+    if recommendation is None:
+        return RedirectResponse(url="/shipments", status_code=status.HTTP_303_SEE_OTHER)
+
+    view = serialize_recommendation(db, recommendation)
+    approval = approval_for_recommendation(db, recommendation)
+    workflow = None
+    if recommendation.workflow_execution_id:
+        try:
+            workflow = get_execution(recommendation.workflow_execution_id)
+        except Exception:  # noqa: BLE001 - read-only page resilience
+            workflow = None
+
+    return templates.TemplateResponse(
+        request=request,
+        name="recommendations/detail.html",
+        context={
+            "request": request,
+            "active_tab": "approvals",
+            "recommendation": recommendation,
+            "view": view,
+            "approval": approval,
+            "workflow": workflow,
+            "csrf_token": get_session_csrf(request),
+            "decision_result": None,
+            "error": None,
+        },
+    )
+
+
+@router.post("/ui/approvals/{approval_id}/decision", response_class=HTMLResponse)
+def decide_approval_htmx(
+    request: Request,
+    approval_id: uuid.UUID,
+    decision: str = Form(...),
+    comment: Optional[str] = Form(None),
+    _csrf: None = Depends(require_csrf_for_ui),
+    db: Session = Depends(get_db),
+):
+    """Persist the human decision and resume the paused graph, then re-render."""
+    approval = db.get(Approval, approval_id)
+    if approval is None:
+        return HTMLResponse(
+            "<div class='p-4 rounded-xl border border-rose-800 bg-rose-950/40 text-rose-300 text-sm'>"
+            "Approval not found.</div>",
+            status_code=404,
+        )
+
+    actor = resolve_ui_actor(request, db)
+    error: Optional[Dict[str, Any]] = None
+    try:
+        submit_approval_decision(
+            approval_id,
+            action=decision,
+            actor_id=actor.id if actor else None,
+            comment=comment or None,
+        )
+    except ApprovalError as exc:
+        error = _panel_error(str(exc), code=getattr(exc, "code", "APPROVAL_ERROR"))
+    except Exception as exc:  # noqa: BLE001 - render the failure in the panel
+        error = _panel_error(str(exc)[:1000], code="APPROVAL_RESUME_FAILED")
+
+    db.expire_all()
+    approval = db.get(Approval, approval_id)
+    recommendation = db.get(Recommendation, approval.recommendation_id)
+    workflow = None
+    if approval.workflow_execution_id:
+        try:
+            workflow = get_execution(approval.workflow_execution_id)
+        except Exception:  # noqa: BLE001 - read-only panel resilience
+            workflow = None
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/approval_panel.html",
+        context={
+            "request": request,
+            "approval": approval,
+            "recommendation": recommendation,
+            "workflow": workflow,
+            "error": error,
+            "decision_result": None if error else approval.status,
+            "csrf_token": get_session_csrf(request),
+        },
+    )
+
+
+@router.get("/approvals", response_class=HTMLResponse)
+def approvals_list_view(
+    request: Request,
+    status_filter: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Render the broker approval queue."""
+    stmt = select(Approval)
+    if status_filter:
+        stmt = stmt.where(Approval.status == status_filter)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    approvals = db.scalars(
+        stmt.order_by(desc(Approval.requested_at)).limit(100)
+    ).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="approvals/list.html",
+        context={
+            "request": request,
+            "active_tab": "approvals",
+            "approvals": approvals,
+            "total": total,
+            "current_status": status_filter,
+        },
+    )
+
+
+@router.get("/approvals/{approval_id}")
+def approval_redirect(approval_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Single approval surface lives on the recommendation page."""
+    approval = db.get(Approval, approval_id)
+    if approval is None:
+        return RedirectResponse(url="/approvals", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        url=f"/recommendations/{approval.recommendation_id}#approval",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )

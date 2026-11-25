@@ -1,0 +1,89 @@
+<div id="approval-panel" class="rounded-xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+            <h2 class="text-base font-semibold text-white">Human Broker Review</h2>
+            <p class="text-xs text-slate-400">
+                The workflow is paused at Node 11 until a human decision is recorded and the graph resumes.
+            </p>
+        </div>
+        {% if approval %}
+        <span class="text-xs px-2.5 py-1 rounded-full font-semibold
+            {% if approval.status == 'pending' %}bg-amber-500/20 text-amber-300 border border-amber-500/30
+            {% elif approval.status == 'approved' %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30
+            {% elif approval.status in ('rejected', 'changes_requested') %}bg-rose-500/20 text-rose-300 border border-rose-500/30
+            {% else %}bg-slate-500/20 text-slate-300 border border-slate-500/30{% endif %}">
+            {{ approval.status|replace('_', ' ')|upper }}
+        </span>
+        {% endif %}
+    </div>
+
+    {% if error %}
+    <div class="p-3 rounded-lg border border-rose-800 bg-rose-950/40 text-xs text-rose-300">
+        <strong>{{ error.code }}</strong> — {{ error.message }}
+    </div>
+    {% endif %}
+
+    {% if approval is none %}
+    <p class="text-xs text-slate-500">
+        No human approval record exists for this recommendation. Approvals are created only when a ready
+        recommendation reaches Node 11.
+    </p>
+    {% elif approval.status == 'pending' %}
+    <form hx-post="/ui/approvals/{{ approval.id }}/decision"
+          hx-target="#approval-panel"
+          hx-swap="outerHTML"
+          class="space-y-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+        <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Broker comment (optional)</label>
+            <textarea name="comment" rows="2"
+                      placeholder="Record the reason for the decision..."
+                      class="w-full rounded-md bg-slate-950 border border-slate-800 p-2 text-slate-100 text-sm focus:border-indigo-500 focus:outline-none"></textarea>
+        </div>
+        <div class="flex flex-wrap gap-3">
+            <button type="submit" name="decision" value="approve"
+                    class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow">
+                Approve &amp; create booking proposal
+            </button>
+            <button type="submit" name="decision" value="reject"
+                    class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold shadow">
+                Reject
+            </button>
+            <button type="submit" name="decision" value="request_changes"
+                    class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold shadow">
+                Request changes
+            </button>
+        </div>
+    </form>
+    {% else %}
+    <dl class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div class="p-3 rounded bg-slate-950 border border-slate-800">
+            <dt class="text-slate-500">Decision</dt>
+            <dd class="font-semibold text-slate-200 mt-1">{{ approval.status|replace('_', ' ')|title }}</dd>
+        </div>
+        <div class="p-3 rounded bg-slate-950 border border-slate-800">
+            <dt class="text-slate-500">Decided</dt>
+            <dd class="text-slate-200 mt-1">{{ approval.decided_at.strftime('%Y-%m-%d %H:%M:%S UTC') if approval.decided_at else '—' }}</dd>
+        </div>
+        <div class="p-3 rounded bg-slate-950 border border-slate-800">
+            <dt class="text-slate-500">Selected candidate</dt>
+            <dd class="font-mono text-slate-300 mt-1 break-all">{{ approval.selected_candidate_id or 'none' }}</dd>
+        </div>
+    </dl>
+    {% if approval.decision_comment %}
+    <p class="text-xs text-slate-300"><span class="text-slate-500">Comment:</span> {{ approval.decision_comment }}</p>
+    {% endif %}
+    {% if workflow %}
+    <p class="text-xs text-slate-400">
+        Workflow: <strong class="text-slate-200">{{ workflow.status }}</strong>
+        {% if workflow.outcome %} • outcome <strong class="text-slate-200">{{ workflow.outcome }}</strong>{% endif %}
+        {% if workflow.booking_proposal_id %} • booking proposal <span class="font-mono">{{ workflow.booking_proposal_id }}</span>{% endif %}
+        {% if approval.resumed_at %} • resumed {{ approval.resumed_at.strftime('%H:%M:%S') }} UTC{% endif %}
+    </p>
+    {% endif %}
+    <p class="text-xs text-slate-500">
+        The decision transaction is the sole owner of the immediate shipment transition; Node 12 validates and routes,
+        Node 13 creates the proposal only for an approved decision, and every step is written to the immutable audit log.
+    </p>
+    {% endif %}
+</div>

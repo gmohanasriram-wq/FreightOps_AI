@@ -69,10 +69,10 @@
                     <span>Carriers & Eligibility</span>
                     <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">PH-3</span>
                 </span>
-                <span class="py-2.5 text-slate-500 cursor-not-allowed flex items-center space-x-1.5">
-                    <span>Scoring & Approvals</span>
-                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">PH-4</span>
-                </span>
+                <a href="/approvals" class="py-2.5 {% if active_tab == 'approvals' %}border-b-2 border-indigo-500 text-indigo-400 font-medium{% else %}text-slate-400 hover:text-slate-200{% endif %} flex items-center space-x-1.5">
+                    <span>Scoring &amp; Approvals</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-indigo-900/60 text-indigo-300 border border-indigo-700/50">PH-4</span>
+                </a>
                 <span class="py-2.5 text-slate-500 cursor-not-allowed flex items-center space-x-1.5">
                     <span>Agent Orchestrator</span>
                     <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">PH-5</span>

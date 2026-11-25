@@ -1433,3 +1433,58 @@ Milestone 5 implements the bounded LangGraph orchestration with a real compiled 
 | `docs/14-architecture-review.md` SHA-256 | `9F61632E941B9E06E47EF7F6E2E38C56D97E63E56B7BB76687D605A710182FE4` (verified unchanged) |
 | Tests | `169 passed` |
 | Known limitation | In-process checkpoint store, so an interrupted execution cannot resume after a process restart. The decision and audit records remain durable. |
+
+---
+
+## 25. Milestone 6 implementation decisions (project-owner authorized)
+
+Milestone 6 exposes the completed deterministic recommendation engine and the bounded LangGraph workflow through the API and the Jinja2 + HTMX interface. No duplicate engines were created: every endpoint and UI action calls the Milestone 4 scoring/ranking/persistence services and the Milestone 5 workflow service.
+
+### 25.1 API surface
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/v1/shipments/{shipment_id}/recommendations` | Start (or idempotently reuse) the recommendation workflow; broker/admin only |
+| GET | `/api/v1/shipments/{shipment_id}/recommendations` | List recommendation summaries for a shipment |
+| GET | `/api/v1/recommendations/{recommendation_id}` | Ranked candidates, component scores, exclusions, explanation |
+| GET | `/api/v1/approvals` | Approval queue with `status`, `shipment_id`, and pagination filters |
+| GET | `/api/v1/approvals/{approval_id}` | Approval with candidate comparison |
+| POST | `/api/v1/approvals/{approval_id}/decision` | Record the authoritative human decision and resume the graph |
+| GET | `/api/v1/workflows/{workflow_execution_id}` | Durable workflow execution projection |
+
+All read endpoints accept viewer, broker, and admin. Both mutations require broker/admin, a session-bound `X-CSRF-Token` when cookie-authenticated, and an `Idempotency-Key` header. Mutations return RFC 9457 problem details with ERR-001 (missing key or unsupported input), ERR-004 (not found), ERR-005 (invalid shipment status), ERR-012 (workflow budget exceeded), ERR-013 (invalid or duplicate approval transition), and ERR-015 (workflow failure).
+
+### 25.2 Synchronous 202 status
+
+- The workflow runs synchronously inside the POST so the MVP needs no worker. The response therefore reports the durable execution status at return time (`waiting_for_human` on the ready path, or `completed`), never a fabricated `queued`. This is a deliberate deviation from the illustrative `queued` example in docs/09 and is documented here rather than hidden.
+- The idempotency record is acquired before mutable shipment-state checks, so replaying the same key after the graph has paused or completed returns the cached 202 body instead of a spurious 409. A failed pre-flight check releases the key so a corrected retry is possible. The approval decision endpoint orders its cached lookup before the pending-status check for the same reason.
+
+### 25.3 Unsupported trigger inputs
+
+- `scoring_config_id` is rejected with 422 ERR-001 rather than ignored: the workflow always runs the active scoring configuration, and silently accepting a different identifier would misrepresent which weights produced the scorecard.
+- A `top_n` different from the configured presentation limit is rejected for the same reason. Top-N affects presentation only; every rankable candidate is ranked and persisted regardless.
+
+### 25.4 UI behavior
+
+- The shipment detail page embeds `partials/recommendation_panel.html` inside `#recommendation-container`. The HTMX run button posts to the same workflow service with a unique UI idempotency key and re-renders the panel from persisted state.
+- `/recommendations/{id}` renders the scorecard: verified explanation and optional narration with its provider label, ranked candidates with the four active components, eligible-unrankable candidates, excluded candidates with canonical reason codes, the workflow trace, and the approval panel.
+- `/approvals` renders the broker queue with status filters; `/approvals/{id}` redirects to the recommendation page fragment. Headings and labels state that deferred components are null, not zero.
+- Browser actions use `require_csrf_for_ui`: anonymous demo access keeps working, but once a session cookie exists the submitted token must match the server-side session token. Decisions submitted through the UI resolve the session user, falling back to the demo broker so the local demo remains usable without a login page. API routes never use this fallback and always enforce real authentication.
+
+### 25.5 Tests and verification
+
+- `backend/tests/test_recommendation_api.py` adds 17 tests covering the durable 202 status, missing key, unauthenticated 401, viewer 403, invalid shipment status 409, unsupported scoring configuration, idempotent replay after pausing, ranked and excluded candidate reads, 404 paths, approval queue/detail, approve-and-resume with booking proposal, decision replay, duplicate-decision conflict, missing/invalid decision input, approvals queue page, shipment panel rendering, HTMX workflow run, scorecard page, HTMX approval, and CSRF rejection for a browser session.
+- No schema change or migration was introduced; the API and UI read the existing 21-table schema.
+- Full suite: 186 passed.
+
+### 25.6 Milestone 6 integrity
+
+| Check | Result |
+|---|---|
+| Document path | `docs/16-lead-developer-decision-record.md` |
+| Source documents modified | This section only |
+| Source code added | `backend/app/api/v1/{recommendations,approvals,workflows}.py`; `backend/app/schemas/{recommendation,approval,workflow}.py`; `backend/app/services/recommendation_views.py`; UI routes and four Jinja2 templates; `backend/tests/test_recommendation_api.py` |
+| Database migration | None |
+| `docs/14-architecture-review.md` SHA-256 | `9F61632E941B9E06E47EF7F6E2E38C56D97E63E56B7BB76687D605A710182FE4` (verified unchanged) |
+| Tests | `186 passed` |
+| Known limitation | The workflow executes synchronously in the request. A process restart cannot resume an interrupted in-memory checkpoint; the decision and audit records remain durable. |
