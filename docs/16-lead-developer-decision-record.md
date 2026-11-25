@@ -1488,3 +1488,48 @@ All read endpoints accept viewer, broker, and admin. Both mutations require brok
 | `docs/14-architecture-review.md` SHA-256 | `9F61632E941B9E06E47EF7F6E2E38C56D97E63E56B7BB76687D605A710182FE4` (verified unchanged) |
 | Tests | `186 passed` |
 | Known limitation | The workflow executes synchronously in the request. A process restart cannot resume an interrupted in-memory checkpoint; the decision and audit records remain durable. |
+
+---
+
+## 26. Milestone 7 implementation decisions (project-owner authorized)
+
+Milestone 7 adds the integration/regression suite, a deterministic demo tool, and the operational README. No production behavior changed except the repair described in §25.2, which was committed with Milestone 6.
+
+### 26.1 End-to-end regression suite
+
+- `backend/tests/test_end_to_end.py` adds four regression tests:
+  - the complete lifecycle audit chain — workflow start, validation, pause, `approval.granted`, `booking_proposal.created`, and `workflow.completed` in that order — and the resulting proposal, frozen shipment, and completed execution projection;
+  - D-021 completeness: the persisted candidate count equals the carrier universe, every excluded candidate has no rank or score, and deferred components remain null;
+  - identical facts on two isolated shipments produce identical ranks, four-decimal totals, and recorded rates across separate workflow executions;
+  - the PostgreSQL audit trigger rejects `UPDATE` on `audit_events`, and the rolled-back event remains unchanged.
+- Test fixtures continue to clone demo shipments into fresh UUIDs. The new tests mutate only rows they create.
+
+### 26.2 Demo tooling
+
+- `scripts/demo_walkthrough.py` drives the real application in-process against the configured database: seed, health, shipment page, workflow trigger, snapshot, ranked scorecard, approval queue, approve decision, completed execution, proposal, shipment status, audit count, and scorecard page.
+- The walkthrough copies the fixed synthetic `DEMO-READY-1001` shipment into a fresh UUID per run. This is deliberate: a previous run leaves an active booking proposal on the fixed row, and the schema correctly forbids a second active proposal for the same shipment. Reusing the fixed row would make the second run fail at the proposal constraint.
+- The walkthrough reuses a configured demo broker when present; otherwise it creates a synthetic broker row solely to authenticate the in-process API calls. It prints no password and makes no network call. With `LLM_PROVIDER=offline` and `LLM_DEMO_MODE=true`, the recorded narration attempt is offline and the stored explanation is the deterministic template.
+- The browser path documented in the README requires no login: the UI's approval fallback resolves the demo broker, while the API remains strictly authenticated.
+
+### 26.3 README
+
+- The README now describes the implemented MVP: real status, architecture, exact setup and run commands, demo walkthrough, API surface, RBAC/CSRF/idempotency rules, verified test count and coverage, repository layout, and known limitations.
+- Claims are limited to verified behavior. Deferred items remain labeled deferred: no worker/outbox, no durable cross-process checkpointer, no live carrier integrations, no manual shipment-creation or `.eml` parsing endpoints, deferred scoring components, in-memory auth sessions.
+
+### 26.4 Tests and coverage
+
+- Full suite: **190 passed**.
+- Measured with `pytest --cov=backend.app`: **88%** total line coverage (3729 statements, 462 missed).
+- The suite runs against the configured PostgreSQL database and exercises the real schema, triggers, and workflow graph.
+
+### 26.5 Milestone 7 integrity
+
+| Check | Result |
+|---|---|
+| Document path | `docs/16-lead-developer-decision-record.md` |
+| Source documents modified | This section and `README.md` |
+| Source code added | `backend/tests/test_end_to_end.py`; `scripts/demo_walkthrough.py` |
+| Database migration | None |
+| `docs/14-architecture-review.md` SHA-256 | `9F61632E941B9E06E47EF7F6E2E38C56D97E63E56B7BB76687D605A710182FE4` (verified unchanged) |
+| Tests | `190 passed`, `88%` coverage |
+| Known limitation | Same as Milestones 5 and 6: in-process checkpoint store and synchronous execution. |
