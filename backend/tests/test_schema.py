@@ -136,20 +136,29 @@ def test_scoring_config_partial_unique_enforcement():
     """Verify that uq_scoring_configs_active prevents multiple active configs while allowing multiple inactive."""
     with engine.connect() as conn:
         with conn.begin():
+            # Isolate the test from any active config created by application seeding.
+            conn.execute(text("UPDATE scoring_configs SET is_active = false"))
+            next_version = (
+                conn.execute(text("SELECT COALESCE(MAX(version), 0) + 1 FROM scoring_configs")).scalar()
+                or 1
+            )
+
             # Insert first active config
             conn.execute(
                 text(
                     "INSERT INTO scoring_configs (id, version, name, weights, is_active) "
-                    "VALUES (gen_random_uuid(), 1, 'Default v1', '{\"rate_competitiveness\": 0.3}', true);"
-                )
+                    "VALUES (gen_random_uuid(), :v1, 'Default v1', '{\"rate_competitiveness\": 0.3}', true);"
+                ),
+                {"v1": next_version},
             )
 
             # Insert an inactive config (should succeed)
             conn.execute(
                 text(
                     "INSERT INTO scoring_configs (id, version, name, weights, is_active) "
-                    "VALUES (gen_random_uuid(), 2, 'Candidate v2', '{\"rate_competitiveness\": 0.4}', false);"
-                )
+                    "VALUES (gen_random_uuid(), :v2, 'Candidate v2', '{\"rate_competitiveness\": 0.4}', false);"
+                ),
+                {"v2": next_version + 1},
             )
 
             # Attempting to insert second active config must raise unique violation
@@ -157,8 +166,9 @@ def test_scoring_config_partial_unique_enforcement():
                 conn.execute(
                     text(
                         "INSERT INTO scoring_configs (id, version, name, weights, is_active) "
-                        "VALUES (gen_random_uuid(), 3, 'Conflict v3', '{\"rate_competitiveness\": 0.5}', true);"
-                    )
+                        "VALUES (gen_random_uuid(), :v3, 'Conflict v3', '{\"rate_competitiveness\": 0.5}', true);"
+                    ),
+                    {"v3": next_version + 2},
                 )
 
 

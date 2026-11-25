@@ -25,6 +25,18 @@ logger = logging.getLogger("freightops")
 async def lifespan(app: FastAPI):
     logger.info("Starting %s v%s in %s mode", settings.PROJECT_NAME, settings.VERSION, settings.ENVIRONMENT)
     logger.info("Configured Database URI: %s@%s:%s/%s", settings.POSTGRES_USER, settings.POSTGRES_SERVER, settings.POSTGRES_PORT, settings.POSTGRES_DB)
+    logger.info("LLM provider: %s (demo mode=%s)", settings.LLM_PROVIDER, settings.LLM_DEMO_MODE)
+
+    if settings.SEED_DEMO_DATA_ON_STARTUP:
+        from backend.app.db.session import SessionLocal
+        from backend.app.services.demo_seed import seed_all_demo_data
+
+        try:
+            with SessionLocal() as db:
+                summary = seed_all_demo_data(db)
+            logger.info("Synthetic demo data seeded: %s", summary)
+        except Exception:
+            logger.exception("Demo data seeding failed; application will continue")
     yield
     logger.info("Shutting down %s", settings.PROJECT_NAME)
 
