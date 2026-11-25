@@ -657,8 +657,11 @@ def _upsert_demo_shipment(
         shipment.lane_destination = f"{destination.city}, {destination.state}"
         shipment.requirements = requirements
         shipment.notes = notes
-        if shipment.status in ("draft", "intake_received", "validation_failed"):
-            shipment.status = "validated"
+        # Demo shipments are synthetic seed fixtures with fixed UUIDs. Seeding
+        # refreshes them to a runnable state so a repeated demo never resumes a
+        # stale workflow. User-created shipments are never touched here.
+        shipment.status = "validated"
+        shipment.frozen_at = None
         db.flush()
 
     db.execute(delete(ShipmentStop).where(ShipmentStop.shipment_id == shipment.id))

@@ -1379,3 +1379,57 @@ All component values are Decimal, quantized to four decimal places with `ROUND_H
 ---
 
 *End of decision record. This document records decisions; implementation is authorized separately by the project owner.*
+
+---
+
+## 24. Milestone 5 implementation decisions (project-owner authorized)
+
+Milestone 5 implements the bounded LangGraph orchestration with a real compiled `StateGraph`, one human interrupt, and durable PostgreSQL projections. The project owner's end-to-end authorization covers these implementation choices; they add no fabricated carrier facts.
+
+### 24.1 Graph runtime
+
+- The graph is a `langgraph.graph.StateGraph` whose state schema is `WorkflowState` (Pydantic, `extra="forbid"`). It has exactly the 16 canonical nodes, one `interrupt()` in `request_human_approval`, and an independent terminal failure sink `handle_failure`.
+- Every non-terminal edge is conditional: a recorded `state.error` routes to `handle_failure`; otherwise the approved edge is taken. No error path flows through `finalize_execution`.
+- Checkpoints use LangGraph's `MemorySaver`. It is process-local and holds only graph resume state. The authoritative operator-visible projection is `workflow_executions.state`, and the authoritative history is the append-only `audit_events` stream, both in PostgreSQL. A process restart cannot resume an interrupted graph from a checkpoint for this MVP; a durable checkpointer (and the additional tables it would require) is deliberately out of scope to preserve the 21-table schema. The approval decision is durably recorded before the resume attempt, so a resume failure is terminal and auditable rather than silently lost.
+- `graph.invoke` is called with `thread_id=execution_id` and a recursion limit of 64. Attempt counts, node counts, LLM counts, cumulative compute seconds, and leases are enforced by the node wrapper and persisted on every node.
+
+### 24.2 Execution, lease, and budget semantics
+
+- A queued execution is started exactly once by the workflow service: the service acquires a 60-second lease, increments `attempt_count`, and invokes the graph. A resumption keeps the attempt count and is allowed only from `resumption_pending`.
+- Node execution budget: 40 nodes. LLM budget: 6 calls, checked before narrating. Compute budget: 900 cumulative active seconds. The standard attempt cap is 3.
+- Budget failures are terminal: `MAX_NODE_EXECUTIONS_EXCEEDED` and `MAX_LLM_CALLS_EXCEEDED` fail the execution; compute, continuous-attempt, and workflow timeout codes map to `timed_out`. The failure payload preserves the originating node.
+- `workflow_executions.status` never changes after a terminal transition. Nodes called after termination return without side effects.
+- Audit writes use deterministic `idempotency_key` values (`node1:`, `node3:`, `node11:`, `node13:`, `node14:`, `node16:`, `approval-decision:`), so a replayed node cannot duplicate an audit record.
+
+### 24.3 Node responsibility split
+
+- Node 12 (`apply_human_decision`) validates the persisted decision and routes; it does not change the shipment. The approval service's decision transaction is the sole owner of the immediate post-decision shipment status (`approved`, `sourcing`) and sets the execution to `resumption_pending` before the graph resumes.
+- Node 11 creates the pending approval and pause audit, sets the shipment to `pending_approval`, releases the lease, and then calls `interrupt()`. On resume it only accepts a terminal persisted decision, and rejects a missing, pending, or mismatched decision.
+- Node 13 creates the booking proposal from the approved `selected_candidate_id`, freezes the shipment, and emits the proposal audit. It never selects a different candidate than the approved one.
+- Node 14 derives the business outcome and writes the completion metrics; Node 15 finalizes the execution; Node 16 is the only failure terminal.
+- Node 2 refuses shipments outside `validated`/`sourcing`. Re-sourcing requires the normal lifecycle transition, not an implicit status reset inside the workflow.
+
+### 24.4 LLM narration in demo mode
+
+- `LLM_DEMO_MODE=true` (the default) performs no external network call. The gateway returns an error result, records an `llm_invocations` row with the reason (`LLM_OFFLINE` for the default offline provider, `LLM_DEMO_MODE` for a configured provider in demo mode), and the stored recommendation uses the deterministic template with provider label `deterministic_template`.
+- The LLM never chooses tools, nodes, carriers, or scores. Narration is emitted only from verified facts already computed and persisted.
+- `LLM_PROVIDER=offline` is the shipped default, so the product runs deterministically without any paid API key.
+
+### 24.5 Tests and verification
+
+- `backend/tests/test_workflow.py` covers the ready/pause path, approve, reject, changes requested, no eligible carriers, no rankable candidates, validation failure, invalid shipment status, idempotent start, node and compute budget exhaustion, duplicate decisions, deterministic repeatability for identical facts, snapshot retrieval, and strict state-schema rejection.
+- Test fixtures clone demo shipments into fresh UUIDs so tests never mutate the fixed demo records or delete data.
+- `seed_all_demo_data` resets the fixed synthetic demo shipments (not user-created shipments) to `validated` on each seed, so a repeated demo starts from a runnable state.
+- Full suite: 169 passed.
+
+### 24.6 Milestone 5 integrity
+
+| Check | Result |
+|---|---|
+| Document path | `docs/16-lead-developer-decision-record.md` |
+| Source documents modified | `docs/07-agent-workflow.md` Node 6 clarification (pre-existing approved edit, committed with this milestone) and this section |
+| Source code added | `backend/app/workflows/{__init__,state,runtime,nodes,graph,service}.py`; `backend/app/services/approvals.py`; LLM narration gateway; workflow tests |
+| Database migration | None. The existing 21-table schema supports all workflow, approval, proposal, invocation, and audit records. |
+| `docs/14-architecture-review.md` SHA-256 | `9F61632E941B9E06E47EF7F6E2E38C56D97E63E56B7BB76687D605A710182FE4` (verified unchanged) |
+| Tests | `169 passed` |
+| Known limitation | In-process checkpoint store, so an interrupted execution cannot resume after a process restart. The decision and audit records remain durable. |
